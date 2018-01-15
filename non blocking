@@ -1,0 +1,496 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <sys/time.h>
+#include <float.h>
+#include <omp.h>
+#include "mpi.h"
+
+#include <cilk/cilk.h>
+#include <cilk/cilk_api.h>
+
+//non blocking implementation of knn algorithm
+// Apostolou Orestis 8587
+
+struct timeval startwtime, endwtime;
+double seq_time;
+
+time_t t;
+int prev,next;
+int i,j,l,n,q,extra=0;  //n: number of inputs
+int k,d;    // k: parameter of knn,  d: number of dimensions
+double p;
+
+double *elements;                     //the matrix with the elements (instead of corpus.mat) nxd
+double **mindist;                     // the matrix with the smallest distances nxk
+int **id;                         // the matrix with the ids f the smallest distances nxk
+FILE *myfile;                    // the txt file with the matrixes that are input
+
+int numtasks, rank, dest, source, count,len, steps, tag=1;            //needed for MPI send and recieve
+MPI_Status Stat;                                                 //needed for MPI recieve
+double **data;
+double **tmp1;
+
+MPI_Status *stats;     //prosese
+MPI_Request *reqs;   //simplirwse
+
+double distance2(double *matrix,int a,int b);
+double distance(int d,int i, int j, double **array1, double **array2);
+void printmatrixi(int **a, int k, int n);
+void printmatrixd(double **a, int k, int n);
+void shiftrighti(int position, int i, int k, int **a);
+void shiftrightd(int position, int i, int k, double **a);
+void checksequence(int n, int k);
+void checkdistance(int n, int k);
+void checkiderror(int n,int k);
+void checkwithresults(int n,int k);
+
+/** the main program **/
+
+int main(int argc, char **argv) {
+	if (argc !=5){
+		printf("Usage: %s k,n,d,file.txt where k is the knn parameter, n the number of elements\n, d the number of dimensions\n and file.txt the file with the numbers for knn\n", 
+	   argv[0]);
+		exit(1);
+	}
+	
+	//__cilkrts_set_param("nworkers", "2");
+
+	k=atoi(argv[1]);
+	n=atoi(argv[2]);
+	d=atoi(argv[3]);
+
+	MPI_Init(&argc,&argv);                               // initialization of MPI
+	MPI_Comm_size(MPI_COMM_WORLD, &numtasks);           // initialization of MPI
+	MPI_Comm_rank(MPI_COMM_WORLD,&rank);               // initialization of MPI
+	if (n%numtasks==0){
+		steps=n/numtasks;
+	}
+	else{
+		steps=n/numtasks+1;
+	}
+	
+	
+	if (rank==0){
+		mindist =malloc ((n+100)*sizeof *mindist);
+	for (i=0; i<n+100; i++){
+		mindist[i]=malloc(k*sizeof *mindist[i]);
+	}
+	id =malloc((n+100)*sizeof *id);
+	for (i=0; i<n+100; i++){
+		id[i]=malloc(k*sizeof *id[i]);
+	}
+	
+	}
+	else{
+		mindist =malloc ((steps)*sizeof *mindist);
+	for (i=0; i<steps; i++){
+		mindist[i]=malloc(k*sizeof *mindist[i]);
+	}
+	id =malloc(steps*sizeof *id);
+	for (i=0; i<steps; i++){
+		id[i]=malloc(k*sizeof *id[i]);
+	}
+	}
+
+	stats=(MPI_Status*)malloc(steps*4*sizeof(MPI_Status));
+	reqs=(MPI_Request*)malloc(steps*4*sizeof(MPI_Request));
+	
+	
+	
+	
+	/** constructing the elements matrix **/
+	
+	
+   // srand((unsigned) time(&t));   // should only be called once
+	
+	
+
+
+	
+	/** end of construction **/
+	
+	/** constructing the nxk matrixes **/
+	
+	for (i=0; i<steps; i++){
+		for (j=0; j<k; j++){
+			id[i][j]=0;
+			mindist[i][j]=101;
+		}
+	} 
+	
+	/** end of construction **/
+	
+	/** Here starts the parallel section**/
+
+	
+
+	/** each process gets its data and we initialize a tmp array for comparisons**/
+	data =malloc (steps*sizeof *data);
+	for (i=0; i<steps; i++){
+		data[i]=malloc(d*sizeof *data[i]);
+	}
+	tmp1=malloc(2*steps*sizeof *tmp1);
+	for (i=0;i<2*steps;i++){
+		tmp1[i]=malloc(d*sizeof *tmp1[i]);
+	}
+    extra=steps*numtasks-n;
+for (q=0;q<numtasks;q++){
+	
+	
+	myfile=fopen(argv[4],"rb");
+	 for(i = 0; i < n+extra; i++)
+      {
+      for (j = 0 ; j < d; j++)
+        {
+        len=fread(&p,8,1,myfile);
+        if ((i>rank*steps-1) && (i<steps*(rank+1))){
+        	if ((rank!=numtasks-1) || (n%numtasks==0)){
+        		data[i%steps][j]=p*10;
+        		tmp1[i%steps][j]=p*10;
+        	}
+        	else{
+        		if (i%steps<steps-extra){
+        			data[i%steps][j]=p*10;
+        			tmp1[i%steps][j]=p*10;
+        		}
+        		else{
+        			data[i%steps][j]=101;
+        			tmp1[i%steps][j]=102;
+        		}
+        	}
+            
+        } 
+        
+      }
+    }  
+  
+
+//printmatrix(elements,d,steps);
+
+
+}
+
+
+  fclose(myfile);
+  /** this section is only needed for checking if the program runs correctly **/
+  if (rank==0){
+  	myfile=fopen(argv[4],"rb");
+  	elements =(double*)malloc (n*d*sizeof (double));
+	
+	for (i=0;i<n*d;i++){
+			len=fread(&p,8,1,myfile);
+			elements[i]=p*10;
+	}
+	fclose(myfile);
+  }
+   
+    p=rank;
+
+
+    /**free(elements);
+    for (i=0; i<n+100; i++){
+		free(elements[i]);
+	}**/
+////////////   mexri edw swsto //////////////
+    //MPI_Barrier(MPI_COMM_WORLD);
+
+	/** start of comparisons **/
+	if (rank==0)
+	gettimeofday (&startwtime, NULL);
+
+	prev = rank-1;
+    next = rank+1;
+    if (rank == 0)  prev = numtasks - 1;
+    if (rank == (numtasks - 1))  next = 0;
+
+    for (i=0;i<steps;i++){
+     	for (j=0;j<d;j++){
+     		tmp1[i+steps][j]=tmp1[i][j];
+     	} 
+     }
+	
+	for (q=0;q<numtasks;q++){ //q<numtasks
+    
+    for (i=0;i<steps;i++){
+    	MPI_Isend(&tmp1[i][0],d,MPI_DOUBLE,next,i,MPI_COMM_WORLD,&reqs[i]);     //&reqs[i+rank*steps]
+    	MPI_Irecv(&tmp1[i+steps][0],d,MPI_DOUBLE,prev,i,MPI_COMM_WORLD,&reqs[i+steps]);    //&reqs[i+rank*steps+n]
+    }
+
+
+	//#pragma omp parallel for
+
+	cilk_for (i=0; i<steps; i++){
+		for (j=0; j<steps; j++){
+			if ((i != j) || (q!=0)){     
+				if (distance(d, i, j,data,tmp1) < mindist[i][k-1]){
+					l=k-1;
+					while ((l >=0 ) && (distance(d, i, j,data,tmp1) < mindist[i][l]) ){
+						l--;
+					}
+					shiftrightd(l+1,i,k,mindist);
+					shiftrighti(l+1,i,k,id);
+
+					mindist[i][l+1]=distance(d, i, j,data,tmp1);
+                   
+					p=rank-q;
+					if (p<0)
+						p+=numtasks;
+
+					id[i][l+1]=j+p*steps;     
+				}
+			}
+		}
+	}
+    
+    MPI_Waitall(steps*2,reqs,stats);
+
+    if (q<numtasks-1){
+
+    for (i=0;i<steps;i++){
+     	for (j=0;j<d;j++){
+     		tmp1[i][j]=tmp1[i+steps][j];
+     	} 
+     }
+     }
+	} 
+	
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (rank==0){
+    //printmatrix(mindist,k,steps);
+	//printmatrix(tmp1,d,2*steps);
+	//printmatrix(data,d,steps);
+	//printmatrix(id,k,steps);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (rank!=0){
+    	for (j=1;j<numtasks;j++)
+    	{
+    		if (rank==j)
+    		{
+    			for (i=0;i<steps;i++){
+    				MPI_Send(&mindist[i][0],k, MPI_DOUBLE, 0, tag, MPI_COMM_WORLD);
+    			}
+    		}
+    	}
+    }
+    else{
+    	for (j=1;j<numtasks;j++){
+    		for (i=0;i<steps;i++){
+    			MPI_Recv(&mindist[j*steps+i][0],k, MPI_DOUBLE, j, tag, MPI_COMM_WORLD, &Stat);
+    		}
+    	}
+    }
+     MPI_Barrier(MPI_COMM_WORLD);
+   if (rank!=0){
+    	for (j=1;j<numtasks;j++)
+    	{
+    		if (rank==j)
+    		{
+    			for (i=0;i<steps;i++){
+    				MPI_Send(&id[i][0],k, MPI_INT, 0, tag, MPI_COMM_WORLD);
+    			}
+    		}
+    	}
+    }
+    else{
+    	for (j=1;j<numtasks;j++){
+    		for (i=0;i<steps;i++){
+    			MPI_Recv(&id[j*steps+i][0],k, MPI_INT, j, tag, MPI_COMM_WORLD, &Stat);
+    		}
+    	}
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (rank==0){
+	gettimeofday (&endwtime, NULL);	
+	seq_time = (double)((endwtime.tv_usec - startwtime.tv_usec)/1.0e6
+		      + endwtime.tv_sec - startwtime.tv_sec);
+	printf("Programm time = %f\n", seq_time);
+    }
+
+    			
+	/** end of comparisons **/
+	checksequence(n,k);
+	checkiderror(n,k);
+	checkdistance(n,k);
+    if (rank==0){
+    //printf("mindsit= %d\n",distance(d,0,0,data,tmp1));
+    //printmatrixd(mindist,k,n);
+	//printmatrix(tmp1,d,steps);
+	//printmatrix(data,d,steps);
+	//printmatrixi(id,k,n);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+    //if (rank==1){
+	//printmatrix(mindist,k,n);
+	//printmatrix(id,k,n);
+    //}
+    
+    /** free memory **/
+
+    
+   
+   /**free(mindist);
+   free(id);
+   free(data);
+   free(tmp1);
+   for(i=0;i<steps;i++){
+   	free(data[i]);
+   }
+   for (i=0;i<2*steps;i++){
+   	free(tmp1);
+   }
+   if (rank==0){
+   	free(elements);
+   	for (i=0;i<n+100;i++){
+   		free(mindist[i]);
+   		free(id[i]);
+   	}
+
+   }
+   else{
+   	for (i=0;i<steps;i++){
+   		free(mindist[i]);
+   		free(id[i]);
+   	}
+   } **/
+	/** end of main **/
+    //checkwithresults(n,k);
+	MPI_Finalize();
+}
+
+double distance(int d, int i, int j,double **array1,double **array2){
+	int b;
+	double dist=0;
+	for (b=0; b<d; b++){
+		dist+=(array1[i][b]-array2[j][b])*(array1[i][b]-array2[j][b]);
+	}
+	return dist;
+}
+		
+	
+void shiftrighti(int position, int i, int k,int **a){
+	int j;
+	for (j=k-1;j>position;j--){
+		a[i][j]=a[i][j-1];
+	}
+}
+
+void shiftrightd(int position, int i, int k,double **a){
+	int j;
+	for (j=k-1;j>position;j--){
+		a[i][j]=a[i][j-1];
+	}
+}
+	
+void printmatrixi(int **a, int k, int n){
+	int i,j;
+	for(i=0;i<n;i++){
+		for(j=0;j<k;j++){
+			printf("%d ",a[i][j]);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+
+void printmatrixd(double **a, int k, int n){
+	int i,j;
+	for(i=0;i<n;i++){
+		for(j=0;j<k;j++){
+			printf("%f ",a[i][j]);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+
+void checksequence(int n, int k){
+	int j,h;
+	int flag=0;
+	if (rank==0){
+		for (j=0;j<n;j++){
+			for (h=0;h<k-1;h++){				
+				if (mindist[j][h]>mindist[j][h+1])
+					flag=1;
+			}
+		}
+		if (flag==1)
+			printf("checksequence problem\n");
+	}
+}
+void checkiderror(int n,int k){
+    int i,j;
+    int flag=0;
+	if (rank==0){
+		for (i=0;i<n;i++){
+			for (j=0;j<k;j++){
+				if (id[i][j]>n-1 || id[i][j]<0)
+					flag=1;
+			}
+		}
+		if (flag==1)
+			printf("checkiderror problem\n");
+	}
+}
+
+double distance2(double *matrix,int a,int b){
+	double sum=0;
+	int i;
+	for (i=0;i<d;i++){
+		sum+=(matrix[a*d+i]-matrix[b*d+i])*(matrix[a*d+i]-matrix[b*d+i]);
+	}
+	return sum;
+}
+
+void checkdistance(int n, int k){
+	int j,i,l,m;
+	double flag=0;
+	if (rank==0){
+		for (i=0;i<n;i++){
+			for (j=0;j<k;j++){
+				if (mindist[i][j]!=distance2(elements,i,id[i][j]))
+					flag+=mindist[i][j]-distance2(elements,i,id[i][j]);
+				
+				//if (flag>1000)
+				//flag=1000;	
+			}
+		}
+		if (flag!=0)
+			printf("checkdistance problem\n");
+	}
+}
+
+void checkwithresults(int n,int k){  //given the results we check if the 2 matrixes are the same
+	if (rank==0){
+	int flag=0;
+    double **el;
+	el=malloc(n*sizeof *el);
+	for (i=0;i<n;i++){
+		el[i]=malloc(k*sizeof *el[i]);
+	}
+	myfile=fopen("results.bin","rb");
+	 for(i = 0; i < n; i++)
+      {
+      for (j = 0 ; j < k; j++)
+        {
+        len=fread(&p,8,1,myfile);
+        el[i][j]=p;
+        for (i=0;i<n;i++){
+        	for (j=0;j<k;j++){
+                if (el[i][j]-mindist[i][j]>0.0001 || el[i][j]-mindist[i][j]<-0.0001){
+                	flag=1;
+                } 
+        	}
+        }
+        if (flag==1){
+        	printf("checkwithresults problem\n");
+        }
+        
+        
+      }
+    }
+    fclose(myfile);
+}
+}
