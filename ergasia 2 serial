@@ -1,0 +1,193 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <sys/time.h>
+#include <float.h>
+#include <sys/time.h>
+#include <omp.h>
+
+#include <cilk/cilk.h>
+#include <cilk/cilk_api.h>
+char workers[10];
+
+// serial implementation of knn algorithm
+// Apostolou Orestis 8587
+
+struct timeval startwtime, endwtime;
+double seq_time;
+
+time_t t;
+int i,n,j,len,l;  //n: number of inputs
+int k,d;    // k: parameter of knn,  d: number of dimensions
+double p;
+
+double **elements;                     //the matrix with the elements (instead of corpus.mat) nxd
+double **mindist;                   // the matrix with the smallest distances nxk
+int **id;                         // the matrix with the ids f the smallest distances nxk
+FILE *myfile;                    // the txt file with the matrixes that are input
+
+
+double distance(int d,int i, int j);
+void printmatrixi(int **a, int k, int n);
+void printmatrixd(double **a, int k, int n);
+void shiftrighti(int position, int i, int k, int **a);
+void shiftrightd(int position, int i, int k, double **a);
+
+
+/** the main program **/
+
+int main(int argc, char **argv) {
+if (argc !=5){
+		printf("Usage: %s k,n,d,file.txt where k is the knn parameter, n the number of elements\n, d the number of dimensions\n and file.txt the file with the numbers for knn\n",  
+	   argv[0]);
+		exit(1);
+	}
+	
+	k=atoi(argv[1]);
+	n=atoi(argv[2]);
+	d=atoi(argv[3]);
+	__cilkrts_set_param("nworkers", "1");
+
+	
+	elements =malloc (n*sizeof *elements);
+	for (i=0; i<n; i++){
+		elements[i]=malloc(d*sizeof *elements[i]);
+	}
+	
+	mindist =malloc (n*sizeof *mindist);
+	for (i=0; i<n; i++){
+		mindist[i]=malloc(k*sizeof *mindist[i]);
+	}
+	id =malloc(n*sizeof *id);
+	for (i=0; i<n; i++){
+		id[i]=malloc(k*sizeof *id[i]);
+	}
+	
+	
+	myfile=fopen(argv[4],"rb");
+	 for(i = 0; i < n; i++)
+      {
+      for (j = 0 ; j < d; j++)
+        {
+        len=fread(&p,8,1,myfile);
+        elements[i][j]=p*10;
+        //printf("float=%f\n",p);
+	}
+}
+fclose(myfile);
+	
+	//printmatrixd(elements,d,n);
+	/** constructing the elements matrix **/
+	
+	
+    //srand((unsigned) time(&t));   // should only be called once
+	
+	
+	/**int l;
+	
+	int j;
+	for (i=0; i<n; i++){
+		for (j=0; j<d; j++){
+			elements[i][j]= rand() % 1000;
+		}
+	}**/
+	
+	/** end of construction **/
+	
+	/** constructing the nxk matrixes **/
+	
+	for (i=0; i<n; i++){
+		for (j=0; j<k; j++){
+			id[i][j]=0;
+			mindist[i][j]=100;
+		}
+	}
+	
+	/** end of construction **/
+	
+	/** start of comparisons **/
+	gettimeofday (&startwtime, NULL);
+	
+	//#pragma omp parallel for
+
+	cilk_for (i=0; i<n; i++){
+		for (j=0; j<n; j++){
+			if (i != j){
+				if (distance(d, i, j) < mindist[i][k-1]){
+					l=k-1;
+					while ((l >=0 ) && (distance(d, i, j) < mindist[i][l]) ){
+						l--;
+					}
+					shiftrightd(l+1,i,k,mindist);
+					shiftrighti(l+1,i,k,id);
+					mindist[i][l+1]=distance(d, i, j);
+					id[i][l+1]=j;
+				}
+			}
+		}
+	}
+	
+	gettimeofday (&endwtime, NULL);	
+	seq_time = (double)((endwtime.tv_usec - startwtime.tv_usec)/1.0e6
+		      + endwtime.tv_sec - startwtime.tv_sec);
+
+    printf("Programm time = %f\n", seq_time);			
+	/** end of comparisons **/
+
+	/**free(elements);
+	for (i=0;i<n;i++){
+		free(elements[i]);
+	}**/
+	
+	//printmatrixd(mindist,k,n);  //if you want to see the matrixes
+	//printmatrixi(id,k,n);       //if you want to see the ids
+	
+	/** end of main **/
+	
+}
+
+double distance(int d, int i, int j){
+	int b;
+	double dist=0;
+	for (b=0; b<d; b++){
+		dist+=((elements[i][b]-elements[j][b]))*((elements[i][b]-elements[j][b]));
+	}
+	return dist;
+}
+		
+	
+void shiftrighti(int position, int i, int k,int **a){
+	int j;
+	for (j=k-1;j>position;j--){
+		a[i][j]=a[i][j-1];
+	}
+}
+
+void shiftrightd(int position, int i, int k,double **a){
+	int j;
+	for (j=k-1;j>position;j--){
+		a[i][j]=a[i][j-1];
+	}
+}
+	
+void printmatrixi(int **a, int k, int n){
+	int i,j;
+	for(i=0;i<n;i++){
+		for(j=0;j<k;j++){
+			printf("%d ",a[i][j]);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
+
+void printmatrixd(double **a, int k, int n){
+	int i,j;
+	for(i=0;i<n;i++){
+		for(j=0;j<k;j++){
+			printf("%f ",a[i][j]);
+		}
+		printf("\n");
+	}
+	printf("\n");
+}
